@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 
 # Initialisation de pygame
 pygame.init()
@@ -30,6 +31,7 @@ class Unit:
         self.moved = False  # Indicateur de mouvement pour le tour
         self.pv = 2  # Points de Vie
         self.attacked_this_turn = False  # Indicateur d'attaque dans ce tour
+        self.target = None  # Objectif assigné
 
     def draw(self, screen, units, objectives):
         """Affiche l'unité sur l'écran."""
@@ -221,46 +223,50 @@ def draw_victory_message(screen, message, width, height):
     victory_img = font.render(message, True, (255, 255, 255))
     screen.blit(victory_img, (width // 2 - 100, height // 2 - 24))
 
-# Déplacer les unités ennemies
 def move_enemy_units(units, objectives):
-    """Déplace les unités ennemies."""
-    for unit in units:
-        if unit.color == ENEMY_COLOR and not unit.moved:
-            possible_moves = [(unit.x + dx, unit.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
-            random.shuffle(possible_moves)
-            target_unit = None
+    """Déplace les unités ennemies vers les objectifs de manière stratégique."""
+    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR and not unit.moved]
+    available_objectives = [obj for obj in objectives if not any(unit.target == (obj['x'], obj['y']) for unit in enemy_units)]
 
-            # Try to find a player unit to attack
-            for x, y in possible_moves:
-                target_unit = next((u for u in units if u.x == x and u.y == y and u.color == PLAYER_COLOR), None)
-                if target_unit:
-                    break
+    for enemy in enemy_units:
+        if (enemy.x, enemy.y) == enemy.target:
+            continue  # L'unité reste sur l'objectif
 
-            if target_unit:
-                unit.attack(target_unit, units, objectives)
-                unit.move(target_unit.x, target_unit.y)
+        if enemy.target is None and available_objectives:
+            # Assigner un objectif à l'unité
+            min_distance = float('inf')
+            closest_obj = None
+
+            for obj in available_objectives:
+                distance = math.sqrt((enemy.x - obj['x']) ** 2 + (enemy.y - obj['y']) ** 2)
+                if distance < min_distance:
+                    if obj['type'] == 'MAJOR':
+                        min_distance = distance
+                        closest_obj = obj
+                    elif closest_obj is None or closest_obj['type'] == 'MINOR':
+                        min_distance = distance
+                        closest_obj = obj
+
+            if closest_obj:
+                enemy.target = (closest_obj['x'], closest_obj['y'])
+                available_objectives.remove(closest_obj)
+
+        if enemy.target and (enemy.x, enemy.y) != enemy.target:
+            # Mouvement vers l'objectif assigné
+            dx, dy = enemy.target[0] - enemy.x, enemy.target[1] - enemy.y
+            step_x, step_y = (dx // abs(dx) if dx != 0 else 0), (dy // abs(dy) if dy != 0 else 0)
+            new_x, new_y = enemy.x + step_x, enemy.y + step_y
+
+            if not any(u.x == new_x and u.y == new_y for u in units):
+                enemy.move(new_x, new_y)
             else:
-                # If no player unit to attack, move randomly
+                # Si l'emplacement est occupé, essayer d'autres déplacements
+                possible_moves = [(enemy.x + dx, enemy.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
+                random.shuffle(possible_moves)
                 for x, y in possible_moves:
-                    if unit.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
-                        unit.move(x, y)
+                    if enemy.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
+                        enemy.move(x, y)
                         break
-
-    # Check for sandwiches
-    for player_unit in [u for u in units if u.color == PLAYER_COLOR]:
-        x, y = player_unit.x, player_unit.y
-        adjacent_enemies = 0
-
-        # Check each direction (left, right, up, down)
-        if any(u.x == x-1 and u.y == y and u.color == ENEMY_COLOR for u in units):
-            if any(u.x == x+1 and u.y == y and u.color == ENEMY_COLOR for u in units):
-                adjacent_enemies += 1
-        if any(u.x == x and u.y == y-1 and u.color == ENEMY_COLOR for u in units):
-            if any(u.x == x and u.y == y+1 and u.color == ENEMY_COLOR for u in units):
-                adjacent_enemies += 1
-
-        if adjacent_enemies > 0:
-            units.remove(player_unit)
 
 # Configuration de la fenêtre
 screen = pygame.display.set_mode((width, height + interface_height))
@@ -330,7 +336,7 @@ while running:
                                 selected_unit.selected = False
                                 selected_unit = None
 
-        if unit_moved:
+        if unit_moved or not player_turn:
             for unit in units_to_move:
                 unit.moved = False  # Réinitialiser l'indicateur de mouvement
                 unit.attacked_this_turn = False  # Réinitialiser l'indicateur d'attaque
@@ -342,13 +348,12 @@ while running:
 
             if not player_turn:
                 move_enemy_units(units, objectives)
-            
-            
+                unit_moved = True #termine le tour du joueur
 
-            if player_score >= 50:
+            if player_score >= 500:
                 victory = True
                 victory_message = "Victoire Joueur!"
-            elif enemy_score >= 50:
+            elif enemy_score >= 500:
                 victory = True
                 victory_message = "Victoire Ennemi!"
             elif not any(unit.color == PLAYER_COLOR for unit in units):
