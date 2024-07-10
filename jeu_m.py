@@ -31,7 +31,6 @@ class Unit:
         self.moved = False  # Indicateur de mouvement pour le tour
         self.pv = 2  # Points de Vie
         self.attacked_this_turn = False  # Indicateur d'attaque dans ce tour
-        self.target = None  # Objectif assigné
 
     def draw(self, screen, units, objectives):
         """Affiche l'unité sur l'écran."""
@@ -222,50 +221,144 @@ def draw_victory_message(screen, message, width, height):
     victory_img = font.render(message, True, (255, 255, 255))
     screen.blit(victory_img, (width // 2 - 100, height // 2 - 24))
 
-def move_enemy_units(units, objectives):
-    """Déplace les unités ennemies vers les objectifs de manière stratégique."""
-    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR and not unit.moved]
-    available_objectives = [obj for obj in objectives if not any(unit.target == (obj['x'], obj['y']) for unit in enemy_units)]
+def computer(units_to_move , objectives) :
+    matrix = [[0 for _ in range(size)] for _ in range(size)]; 
+    
+    for unit in units :
+        if unit.color == ENEMY_COLOR and not unit.moved:
+            matrix[unit.y][unit.x] = 2
+        else :
+            matrix[unit.y][unit.x] = 1
+    for obj in objectives :
+        if obj['type'] == 'MAJOR' :
+            matrix[obj['y']][obj['x']] = 3
+        else :
+             matrix[obj['y']][obj['x']] = 4    
+    
+    for unit in units_to_move:
+            possible_moves = [(unit.x + dx, unit.y + dy) for dx in [-1, 0, 1] for dy in [-1, 0, 1] if unit.can_move(unit.x + dx, unit.y + dy)]
+           
+            if possible_moves:
+                move = random.choice(possible_moves)
+                target_unit = [u for u in units if u.x == move[0] and u.y == move[1] and u.color != unit.color]
+            possible_moves = [(unit.x + dx, unit.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
+            random.shuffle(possible_moves)
+            target_unit = None
 
-    for enemy in enemy_units:
-        if (enemy.x, enemy.y) == enemy.target:
-            continue  # L'unité reste sur l'objectif
+            # Try to find a player unit to attack
+            for x, y in possible_moves:
+                target_unit = next((u for u in units if u.x == x and u.y == y and u.color == PLAYER_COLOR), None)
+                if target_unit:
+                    break
 
-        if enemy.target is None and available_objectives:
-            # Assigner un objectif à l'unité
-            min_distance = float('inf')
-            closest_obj = None
-
-            for obj in available_objectives:
-                distance = math.sqrt((enemy.x - obj['x']) ** 2 + (enemy.y - obj['y']) ** 2)
-                if distance < min_distance:
-                    if obj['type'] == 'MAJOR':
-                        min_distance = distance
-                        closest_obj = obj
-                    elif closest_obj is None or closest_obj['type'] == 'MINOR':
-                        min_distance = distance
-                        closest_obj = obj
-
-            if closest_obj:
-                enemy.target = (closest_obj['x'], closest_obj['y'])
-                available_objectives.remove(closest_obj)
-
-        if enemy.target and (enemy.x, enemy.y) != enemy.target:
-            # Mouvement vers l'objectif assigné
-            dx, dy = enemy.target[0] - enemy.x, enemy.target[1] - enemy.y
-            step_x, step_y = (dx // abs(dx) if dx != 0 else 0), (dy // abs(dy) if dy != 0 else 0)
-            new_x, new_y = enemy.x + step_x, enemy.y + step_y
-
-            if not any(u.x == new_x and u.y == new_y for u in units):
-                enemy.move(new_x, new_y)
+            if target_unit:
+                unit.attack(target_unit[1], units, objectives)
             else:
-                # Si l'emplacement est occupé, essayer d'autres déplacements
-                possible_moves = [(enemy.x + dx, enemy.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
-                random.shuffle(possible_moves)
-                for x, y in possible_moves:
-                    if enemy.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
-                        enemy.move(x, y)
-                        break
+                unit.move(move[0], move[1])
+
+def cilblage( ):
+    return True 
+
+#afficher les position de chaque unité voir de tout les objectif
+def affiche_position(units):
+    matrise_distance = []
+    # Distance par rapport aux objectif
+    for unit in units:
+        tab_distance = []
+        if unit.color == ENEMY_COLOR:
+            #print(f'Unit at position: ({unit.x}, {unit.y})')
+            for obj in objectives:
+                diff_x = obj['x'] - unit.x
+                diff_y = obj['y'] - unit.y
+                x = diff_x * diff_x
+                y = diff_y * diff_y
+                distance = math.sqrt(x + y)
+                #print(f'Distance : ({distance})')
+                tab_distance.append({'Distance': distance, 'Diff_x': diff_x, 'Diff_y': diff_y})
+            matrise_distance.append(tab_distance)
+    i = 0
+    for unit in units :
+        if unit.color == ENEMY_COLOR:
+            mini = 1000000000000
+            if i < len(objectives)/2:
+                for donnee in matrise_distance[i]:
+                    if donnee['Distance'] < mini:
+                        mini = donnee['Distance']
+                for donnee in matrise_distance[i]:
+                    if donnee['Distance'] == mini:
+                        if mini != 0:
+                            if(donnee['Diff_x'] < 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x-1, unit.y - 1)
+                            elif (donnee['Diff_x'] > 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x + 1, unit.y - 1)
+                            elif (donnee['Diff_x'] > 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x + 1, unit.y + 1)
+                            elif (donnee['Diff_x'] < 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x - 1, unit.y + 1)
+
+                            if (donnee['Diff_x'] == 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x, unit.y + 1 )
+                            if (donnee['Diff_x'] == 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x, unit.y - 1 )
+                            if (donnee['Diff_x'] > 0 and donnee['Diff_y'] == 0) :
+                                unit.move(unit.x + 1, unit.y )
+                            if (donnee['Diff_x'] < 0 and donnee['Diff_y'] == 0) :
+                                unit.move(unit.x - 1, unit.y )
+            #print(mini)
+            i += 1
+    #print(matrise_distance)
+    #calcul de distance
+    #print(objectives)
+
+def cible_user(units):
+    matrice_of_distance_ennemy_per_unit = []
+    for unit in units : 
+        distace_to_user_unit = []
+        if unit.color == ENEMY_COLOR:
+            #calcul des distance
+            for units_user in units :
+                if units_user.color == PLAYER_COLOR :
+                    diff_x = units_user.x - unit.x
+                    diff_y = units_user.y - unit.y
+                    x = diff_x * diff_x
+                    y = diff_y * diff_y
+                    distance = math.sqrt(x + y)
+                    #print(f'Distance : ({distance})')
+                    distace_to_user_unit.append({'Distance': distance, 'Diff_x': diff_x, 'Diff_y': diff_y})
+            matrice_of_distance_ennemy_per_unit.append(distace_to_user_unit)
+    i = 0
+    for unit in units :
+        if unit.color == ENEMY_COLOR:
+            mini = 1000000000000
+            if i >= 2:
+                for donnee in matrice_of_distance_ennemy_per_unit[i]:
+                    if donnee['Distance'] < mini:
+                        mini = donnee['Distance']
+                for donnee in matrice_of_distance_ennemy_per_unit[i]:
+                    if donnee['Distance'] == mini:
+                        if mini != 0:
+                            if(donnee['Diff_x'] < 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x-1, unit.y - 1)
+                            elif (donnee['Diff_x'] > 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x + 1, unit.y - 1)
+                            elif (donnee['Diff_x'] > 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x + 1, unit.y + 1)
+                            elif (donnee['Diff_x'] < 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x - 1, unit.y + 1)
+
+                            if (donnee['Diff_x'] == 0 and donnee['Diff_y'] > 0) :
+                                unit.move(unit.x, unit.y + 1 )
+                            if (donnee['Diff_x'] == 0 and donnee['Diff_y'] < 0) :
+                                unit.move(unit.x, unit.y - 1 )
+                            if (donnee['Diff_x'] > 0 and donnee['Diff_y'] == 0) :
+                                unit.move(unit.x + 1, unit.y )
+                            if (donnee['Diff_x'] < 0 and donnee['Diff_y'] == 0) :
+                                unit.move(unit.x - 1, unit.y )
+            #print(mini)
+            i += 1
+        #print(distace_to_user_unit)
+    #print(matrice_of_distance_ennemy_per_unit)
+  
 
 # Configuration de la fenêtre
 screen = pygame.display.set_mode((width, height + interface_height))
@@ -287,10 +380,12 @@ player_score = 0
 enemy_score = 0
 victory = False
 victory_message = ""
+i=0
 
 # Boucle principale du jeu
 running = True
 while running:
+    i += 1 
     if not victory:
         unit_moved = False
         for event in pygame.event.get():
@@ -334,20 +429,16 @@ while running:
                                 selected_unit.move(grid_x, grid_y)
                                 selected_unit.selected = False
                                 selected_unit = None
-
-        if unit_moved or not player_turn:
+    
+        if unit_moved:
             for unit in units_to_move:
-                unit.moved = False  # Réinitialiser l'indicateur de mouvement
+                unit.moved = False  # Réinitialiser l'indicateur de mouvemen.p.pt
                 unit.attacked_this_turn = False  # Réinitialiser l'indicateur d'attaque
             player_turn = not player_turn
             units_to_move = [unit for unit in units if (unit.color == PLAYER_COLOR if player_turn else unit.color == ENEMY_COLOR)]
             player_score_turn, enemy_score_turn = calculate_scores(units, objectives)
             player_score += player_score_turn
             enemy_score += enemy_score_turn
-
-            if not player_turn:
-                move_enemy_units(units, objectives)
-                unit_moved = True #termine le tour du joueur
 
             if player_score >= 500:
                 victory = True
@@ -361,7 +452,13 @@ while running:
             elif not any(unit.color == ENEMY_COLOR for unit in units):
                 victory = True
                 victory_message = "Victoire Joueur!"
-
+        
+            if not player_turn:
+                affiche_position(units)
+                if i%2 == 0: 
+                    cible_user(units)
+                else: 
+                    computer(units_to_move,objectives)
             pygame.display.flip()
 
     screen.fill((0, 0, 0))
