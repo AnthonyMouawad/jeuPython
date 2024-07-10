@@ -82,7 +82,7 @@ class Unit:
                     units.remove(target_unit)
                     return
 
-            if not (0 <= new_x < size and 0 <= new_y < size) or any(u.x == new_x and u.y == new_y and u.color != target_unit.color for u in units):
+            if not (0 <= new_x < size and 0 <= new_y < size) or any(u.x == new_x and u.y == new_y for u in units):
                 units.remove(target_unit)
             else:
                 target_unit.move(new_x, new_y)
@@ -267,6 +267,61 @@ def move_enemy_units(units, objectives):
                         enemy.move(x, y)
                         break
 
+def advance_and_attack_enemy(units, objectives):
+    """Avance les unités ennemies vers les unités des joueurs et les attaque si possible."""
+    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR and not unit.moved]
+    player_units = [unit for unit in units if unit.color == PLAYER_COLOR]
+
+    for enemy in enemy_units:
+        if not player_units:
+            break  # Fin du jeu s'il n'y a plus d'unités du joueur
+
+        # Trouver la cible la plus proche
+        min_distance = float('inf')
+        closest_player = None
+
+        for player in player_units:
+            distance = math.sqrt((enemy.x - player.x) ** 2 + (enemy.y - player.y) ** 2)
+            if distance < min_distance:
+                min_distance = distance
+                closest_player = player
+
+        if closest_player and min_distance <= 1:
+            # Attaquer la cible si elle est adjacente
+            enemy.attack(closest_player, units, objectives)
+        elif closest_player:
+            # Se déplacer vers la cible
+            dx, dy = closest_player.x - enemy.x, closest_player.y - enemy.y
+            step_x, step_y = (dx // abs(dx) if dx != 0 else 0), (dy // abs(dy) if dy != 0 else 0)
+            new_x, new_y = enemy.x + step_x, enemy.y + step_y
+
+            if not any(u.x == new_x and u.y == new_y for u in units):
+                enemy.move(new_x, new_y)
+            else:
+                # Si l'emplacement est occupé, essayer d'autres déplacements
+                possible_moves = [(enemy.x + dx, enemy.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
+                random.shuffle(possible_moves)
+                for x, y in possible_moves:
+                    if enemy.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
+                        enemy.move(x, y)
+                        break
+
+def check_sandwich(units):
+    player_units = [unit for unit in units if unit.color == PLAYER_COLOR]
+    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR]
+
+    for enemy in enemy_units:
+        # Check horizontally
+        left_unit = next((u for u in player_units if u.x == enemy.x - 1 and u.y == enemy.y), None)
+        right_unit = next((u for u in player_units if u.x == enemy.x + 1 and u.y == enemy.y), None)
+
+        # Check vertically
+        top_unit = next((u for u in player_units if u.x == enemy.x and u.y == enemy.y - 1), None)
+        bottom_unit = next((u for u in player_units if u.x == enemy.x and u.y == enemy.y + 1), None)
+
+        if (left_unit and right_unit) or (top_unit and bottom_unit):
+            units.remove(enemy)
+
 # Configuration de la fenêtre
 screen = pygame.display.set_mode((width, height + interface_height))
 pygame.display.set_caption("Carte de 20x20 avec unités et déplacement")
@@ -346,8 +401,30 @@ while running:
             enemy_score += enemy_score_turn
 
             if not player_turn:
+                
+                matrix = [[0 for _ in range(size)] for _ in range(size)]; 
+
+                for unit in units :
+                    if unit.color == ENEMY_COLOR and not unit.moved:
+                        matrix[unit.y][unit.x] = 2
+                    else :
+                        matrix[unit.y][unit.x] = 1
+                for obj in objectives :
+                    if obj['type'] == 'MAJOR' :
+                        matrix[obj['y']][obj['x']] = 3
+                    else :
+                        matrix[obj['y']][obj['x']] = 4
+                
+                print(matrix)
+                
+                #advance_and_attack_enemy(units, objectives)  # Appeler la nouvelle fonction pour avancer et attaquer
+                #check_sandwich(units)
                 move_enemy_units(units, objectives)
                 unit_moved = True #termine le tour du joueur
+
+  
+
+
 
             if player_score >= 500:
                 victory = True
