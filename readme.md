@@ -1,1 +1,3 @@
-Base sur laquelle les étudiants vont tenter de créer une IA pour battre le joueur
+Fonctionnalité développée :
+
+Les unités ennemies se déplacent de manière autonome pour atteindre leurs objectifs en utilisant la fonction move_enemy_units().
