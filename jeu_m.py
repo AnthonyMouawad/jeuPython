@@ -100,7 +100,6 @@ class Unit:
 # Générer la carte
 def generate_map(size):
     """Génère une carte de taille spécifiée."""
-    print([[1 for _ in range(size)] for _ in range(size)])
     return [[1 for _ in range(size)] for _ in range(size)]
 
 # Afficher la carte
