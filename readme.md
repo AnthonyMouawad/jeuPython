@@ -6,5 +6,6 @@ groupe 1 :
 - Anthony  MOUAWAD , 
 - Eliott BRIZION , 
 - Ferdinand DEMANGA , 
-- Maurice-Hans NGOME OBIANG , 
+- Maurice-Hans NGOME OBIANG ,
+- Tchaga Chiou Jason
 - Leticia ATANGWA NGUENOSSI
