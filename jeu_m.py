@@ -1,6 +1,5 @@
 import pygame
 import random
-import math
 
 # Initialisation de pygame
 pygame.init()
@@ -31,7 +30,6 @@ class Unit:
         self.moved = False  # Indicateur de mouvement pour le tour
         self.pv = 2  # Points de Vie
         self.attacked_this_turn = False  # Indicateur d'attaque dans ce tour
-        self.target = None  # Objectif assigné
 
     def draw(self, screen, units, objectives):
         """Affiche l'unité sur l'écran."""
@@ -63,30 +61,64 @@ class Unit:
                 return True
         return False
 
-    def move(self, x, y):
-        """Déplace l'unité vers une case spécifiée."""
+    def move(self, x, y, units):
+        """Déplace l'unité vers une case spécifiée, en poussant les unités adverses si nécessaire."""
+        # Vérifier si la case cible est occupée
+        target_unit = next((u for u in units if u.x == x and u.y == y), None)
+
+        if target_unit and target_unit.color != self.color:
+            # Calculer la direction de la poussée
+            dx = x - self.x
+            dy = y - self.y
+            new_x = target_unit.x + dx
+            new_y = target_unit.y + dy
+
+            # Si la poussée est possible, déplacer l'unité cible
+            if 0 <= new_x < size and 0 <= new_y < size and not any(u.x == new_x and u.y == new_y for u in units):
+                target_unit.move(new_x, new_y, units)
+                target_unit.moved = True  # Marquer l'unité comme ayant bougé
+
+        # Déplacer l'unité à la position souhaitée
         self.x = x
         self.y = y
         self.moved = True
 
     def attack(self, target_unit, units, objectives):
-        """Attaque une unité ennemie."""
+        """Attaque une unité ennemie uniquement si les conditions sont remplies."""
         if self.can_move(target_unit.x, target_unit.y):
             dx = target_unit.x - self.x
             dy = target_unit.y - self.y
             new_x, new_y = target_unit.x + dx, target_unit.y + dy
 
-            if target_unit.attacked_this_turn:
-                target_unit.pv -= 1
-                if target_unit.pv <= 0:
-                    units.remove(target_unit)
-                    return
+            # Vérifier si l'unité ennemie est entourée ou poussée vers le bord
+         
 
-            if not (0 <= new_x < size and 0 <= new_y < size) or any(u.x == new_x and u.y == new_y for u in units):
-                units.remove(target_unit)
+            
+            if target_unit.attacked_this_turn:
+                    target_unit.pv -= 1
+                    if target_unit.pv <= 0:
+                        # Only remove the target unit if it's still in the list
+                        if target_unit in units:
+                            units.remove(target_unit)
+                            print("erased 2")
+                            
+                        return
+                    else:
+                    # Only remove the target unit if it's still in the list
+                        if target_unit in units:
+                            units.remove(target_unit)
+                            print("erased 1")
+                        
             else:
-                target_unit.move(new_x, new_y)
-                target_unit.attacked_this_turn = True
+                # Ne déplacer l'unité que si elle peut être poussée légalement
+                if not (0 <= new_x < size and 0 <= new_y < size) or any(u.x == new_x and u.y == new_y and u.color != target_unit.color for u in units):
+                    # Only remove the target unit if it's still in the list
+                    if target_unit in units:
+                        units.remove(target_unit)
+                        print("erased 3")
+                        
+      
+                        
 
     def get_symbols_on_same_tile(self, units):
         """Retourne les symboles des unités sur la même case."""
@@ -117,8 +149,8 @@ def generate_units():
     player_positions = [(0, i) for i in range(size)]
     enemy_positions = [(size - 1, i) for i in range(size)]
 
-    player_positions = random.sample(player_positions, 5)
-    enemy_positions = random.sample(enemy_positions, 5)
+    player_positions = random.sample(player_positions, 7)
+    enemy_positions = random.sample(enemy_positions, 7)
 
     player_units = [Unit(*pos, PLAYER_COLOR) for pos in player_positions]
     enemy_units = [Unit(*pos, ENEMY_COLOR) for pos in enemy_positions]
@@ -147,7 +179,6 @@ def add_objectives():
                 break
 
     return objectives
-
 # Afficher les objectifs
 def draw_objectives(screen, objectives, tile_size):
     """Affiche les objectifs sur la carte."""
@@ -222,105 +253,138 @@ def draw_victory_message(screen, message, width, height):
     victory_img = font.render(message, True, (255, 255, 255))
     screen.blit(victory_img, (width // 2 - 100, height // 2 - 24))
 
-def move_enemy_units(units, objectives):
-    """Déplace les unités ennemies vers les objectifs de manière stratégique."""
-    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR and not unit.moved]
-    available_objectives = [obj for obj in objectives if not any(unit.target == (obj['x'], obj['y']) for unit in enemy_units)]
-
-    for enemy in enemy_units:
-        if (enemy.x, enemy.y) == enemy.target:
-            continue  # L'unité reste sur l'objectif
-
-        if enemy.target is None and available_objectives:
-            # Assigner un objectif à l'unité
-            min_distance = float('inf')
-            closest_obj = None
-
-            for obj in available_objectives:
-                distance = math.sqrt((enemy.x - obj['x']) ** 2 + (enemy.y - obj['y']) ** 2)
-                if distance < min_distance:
-                    if obj['type'] == 'MAJOR':
-                        min_distance = distance
-                        closest_obj = obj
-                    elif closest_obj is None or closest_obj['type'] == 'MINOR':
-                        min_distance = distance
-                        closest_obj = obj
-
-            if closest_obj:
-                enemy.target = (closest_obj['x'], closest_obj['y'])
-                available_objectives.remove(closest_obj)
-
-        if enemy.target and (enemy.x, enemy.y) != enemy.target:
-            # Mouvement vers l'objectif assigné
-            dx, dy = enemy.target[0] - enemy.x, enemy.target[1] - enemy.y
-            step_x, step_y = (dx // abs(dx) if dx != 0 else 0), (dy // abs(dy) if dy != 0 else 0)
-            new_x, new_y = enemy.x + step_x, enemy.y + step_y
-
-            if not any(u.x == new_x and u.y == new_y for u in units):
-                enemy.move(new_x, new_y)
-            else:
-                # Si l'emplacement est occupé, essayer d'autres déplacements
-                possible_moves = [(enemy.x + dx, enemy.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
-                random.shuffle(possible_moves)
-                for x, y in possible_moves:
-                    if enemy.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
-                        enemy.move(x, y)
-                        break
-
-def advance_and_attack_enemy(units, objectives):
-    """Avance les unités ennemies vers les unités des joueurs et les attaque si possible."""
-    enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR and not unit.moved]
-    player_units = [unit for unit in units if unit.color == PLAYER_COLOR]
-
-    for enemy in enemy_units:
-        if not player_units:
-            break  # Fin du jeu s'il n'y a plus d'unités du joueur
-
-        # Trouver la cible la plus proche
-        min_distance = float('inf')
-        closest_player = None
-
-        for player in player_units:
-            distance = math.sqrt((enemy.x - player.x) ** 2 + (enemy.y - player.y) ** 2)
-            if distance < min_distance:
-                min_distance = distance
-                closest_player = player
-
-        if closest_player and min_distance <= 1:
-            # Attaquer la cible si elle est adjacente
-            enemy.attack(closest_player, units, objectives)
-        elif closest_player:
-            # Se déplacer vers la cible
-            dx, dy = closest_player.x - enemy.x, closest_player.y - enemy.y
-            step_x, step_y = (dx // abs(dx) if dx != 0 else 0), (dy // abs(dy) if dy != 0 else 0)
-            new_x, new_y = enemy.x + step_x, enemy.y + step_y
-
-            if not any(u.x == new_x and u.y == new_y for u in units):
-                enemy.move(new_x, new_y)
-            else:
-                # Si l'emplacement est occupé, essayer d'autres déplacements
-                possible_moves = [(enemy.x + dx, enemy.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx != 0 or dy != 0)]
-                random.shuffle(possible_moves)
-                for x, y in possible_moves:
-                    if enemy.can_move(x, y) and not any(u.x == x and u.y == y for u in units):
-                        enemy.move(x, y)
-                        break
-
-def check_sandwich(units):
-    player_units = [unit for unit in units if unit.color == PLAYER_COLOR]
+def ai_turn(units, objectives):
+    """Tour de l'IA pour déplacer et attaquer."""
     enemy_units = [unit for unit in units if unit.color == ENEMY_COLOR]
+    player_units = [unit for unit in units if unit.color == PLAYER_COLOR]
 
-    for enemy in enemy_units:
-        # Check horizontally
-        left_unit = next((u for u in player_units if u.x == enemy.x - 1 and u.y == enemy.y), None)
-        right_unit = next((u for u in player_units if u.x == enemy.x + 1 and u.y == enemy.y), None)
+    # Array pour le suivi des objectifs déjà contrôlés
+    controlled_objectives = []
+    
+    # Stocker les objectifs assignés aux unités ennemies
+    assigned_objectives = {}
 
-        # Check vertically
-        top_unit = next((u for u in player_units if u.x == enemy.x and u.y == enemy.y - 1), None)
-        bottom_unit = next((u for u in player_units if u.x == enemy.x and u.y == enemy.y + 1), None)
+    # 1) Vérifier si une unité ennemie peut attaquer et éliminer une unité du joueur
+    for player_unit in player_units:
+        surrounding_enemies = [
+            enemy for enemy in enemy_units
+            if (abs(enemy.x - player_unit.x) == 1 and enemy.y == player_unit.y) or
+               (abs(enemy.y - player_unit.y) == 1 and enemy.x == player_unit.x)
+        ]
 
-        if (left_unit and right_unit) or (top_unit and bottom_unit):
-            units.remove(enemy)
+        # Si le joueur est entouré par deux unités ennemies
+        if len(surrounding_enemies) == 2:
+            for enemy in surrounding_enemies:
+                if enemy.can_move(player_unit.x, player_unit.y):
+                    enemy.move(player_unit.x, player_unit.y, units)
+                    enemy.moved = True
+                    enemy.attack(player_unit, units, objectives)
+                    break  # Sortir après avoir éliminé une unité du joueur
+
+    # 2) Assigner les objectifs restants
+    for unit in enemy_units:
+        if unit.moved:
+            continue  # Passer les unités qui ont déjà bougé
+
+        closest_obj = None
+        min_distance = float('inf')
+        
+        # Priorité aux objectifs MAJOR, puis trouver l'objectif le plus proche
+        for obj in sorted(objectives, key=lambda o: (o['type'] != 'MAJOR', abs(unit.x - o['x']) + abs(unit.y - o['y']))):
+            if obj not in assigned_objectives.values():
+                distance = abs(unit.x - obj['x']) + abs(unit.y - obj['y'])
+                if distance < min_distance:
+                    closest_obj = obj
+                    min_distance = distance
+
+        # Assigner l'objectif trouvé à l'unité courante
+        if closest_obj:
+            assigned_objectives[unit] = closest_obj
+
+    #3) Déplacer chaque unité vers son objectif 
+    for unit, obj in assigned_objectives.items():
+        if unit.moved:
+            continue  # Passer les unités qui ont déjà bougé
+
+        dx = obj['x'] - unit.x
+        dy = obj['y'] - unit.y
+        new_x = unit.x + (1 if dx > 0 else -1 if dx < 0 else 0)
+        new_y = unit.y + (1 if dy > 0 else -1 if dy < 0 else 0)
+
+        # Vérifier si la case est libre avant de déplacer l'unité
+        if unit.can_move(new_x, new_y) and not any(u.x == new_x and u.y == new_y for u in units):
+            unit.move(new_x, new_y, units)
+            unit.moved = True
+        
+
+        # Marquer l'objectif comme contrôlé si l'unité l'atteint
+        if unit.x == obj['x'] and unit.y == obj['y']:
+            controlled_objectives.append(obj)
+
+    # 4) Déplacer les unités sans objectifs assignés vers les unités du joueur
+    for unit in enemy_units:
+        if unit.moved or unit in assigned_objectives:
+            continue  # Passer les unités qui ont déjà bougé ou qui ont un objectif assigné
+            
+
+        # Trouver la unité joueur la plus proche
+        closest_player = None
+        min_distance = float('inf')
+        for player_unit in player_units:
+            distance = abs(unit.x - player_unit.x) + abs(unit.y - player_unit.y)
+            if distance < min_distance:
+                closest_player = player_unit
+                min_distance = distance
+                
+
+        if closest_player:
+            # Se déplacer vers l'unité joueur la plus proche
+            dx = closest_player.x - unit.x
+            dy = closest_player.y - unit.y
+            new_x = unit.x + (1 if dx > 0 else -1 if dx < 0 else 0)
+            new_y = unit.y + (1 if dy > 0 else -1 if dy < 0 else 0)
+            unit.move(new_x, new_y, units)
+            
+            
+            # Vérifier si la case est libre seulement pour les autres unités ennemies
+            if unit.can_move(new_x, new_y) and not any(u.x == new_x and u.y == new_y for u in units if u.color == ENEMY_COLOR):
+                unit.move(new_x, new_y, units)
+                unit.moved = True
+
+                
+            else:
+                # Si la case est occupée par un joueur, essayer de pousser
+                target_unit = next((u for u in units if u.x == new_x and u.y == new_y and u.color == PLAYER_COLOR), None)
+                if target_unit:
+                    # Tenter de pousser l'unité joueur
+                    push_x = target_unit.x + (1 if dx > 0 else -1 if dx < 0 else 0)
+                    push_y = target_unit.y + (1 if dy > 0 else -1 if dy < 0 else 0)
+
+                    # Vérifier si l'unité joueur est au bord du plateau
+                    if (push_x < 0 or push_x >= size or push_y < 0 or push_y >= size):
+                        # Eliminé l'unité joueur si elle est poussée hors du plateau
+                        units.remove(target_unit)
+                    elif not any(u.x == push_x and u.y == push_y for u in units):
+                        # Si la position de poussée est libre et dans les limites
+                        target_unit.move(push_x, push_y, units)
+                        # Déplacer l'unité ennemie sur la case précédemment occupée par l'unité joueur
+                        unit.move(target_unit.x, target_unit.y, units)
+                        unit.moved = True
+
+        
+                    # Vérifier que la position de poussée est libre et dans les limites
+                    if 0 <= push_x < size and 0 <= push_y < size and not any(u.x == push_x and u.y == push_y for u in units):
+                        target_unit.move(push_x, push_y, units)
+                        
+
+    # Réinitialiser les unités ennemies à la fin du tour de l'IA
+    for unit in enemy_units:
+        unit.moved = False
+        unit.attacked_this_turn = False
+
+    return units
+
+
 
 # Configuration de la fenêtre
 screen = pygame.display.set_mode((width, height + interface_height))
@@ -352,10 +416,6 @@ while running:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     unit_moved = True
-                    if selected_unit:
-                        selected_unit.selected = False
-                        selected_unit = None
-                    
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -386,45 +446,26 @@ while running:
                                 selected_unit.attack(cible, units, objectives)
                                 
                             if selected_unit.can_move(grid_x, grid_y):
-                                selected_unit.move(grid_x, grid_y)
+                                selected_unit.move(grid_x, grid_y, units)
                                 selected_unit.selected = False
                                 selected_unit = None
 
-        if unit_moved or not player_turn:
+        if unit_moved:
             for unit in units_to_move:
                 unit.moved = False  # Réinitialiser l'indicateur de mouvement
                 unit.attacked_this_turn = False  # Réinitialiser l'indicateur d'attaque
             player_turn = not player_turn
+
+            if not player_turn:
+                units = ai_turn(units, objectives)
+                player_turn = not player_turn 
+                
+               
+
             units_to_move = [unit for unit in units if (unit.color == PLAYER_COLOR if player_turn else unit.color == ENEMY_COLOR)]
             player_score_turn, enemy_score_turn = calculate_scores(units, objectives)
             player_score += player_score_turn
             enemy_score += enemy_score_turn
-
-            if not player_turn:
-                
-                matrix = [[0 for _ in range(size)] for _ in range(size)]; 
-
-                for unit in units :
-                    if unit.color == ENEMY_COLOR and not unit.moved:
-                        matrix[unit.y][unit.x] = 2
-                    else :
-                        matrix[unit.y][unit.x] = 1
-                for obj in objectives :
-                    if obj['type'] == 'MAJOR' :
-                        matrix[obj['y']][obj['x']] = 3
-                    else :
-                        matrix[obj['y']][obj['x']] = 4
-                
-                print(matrix)
-                
-                #advance_and_attack_enemy(units, objectives)  # Appeler la nouvelle fonction pour avancer et attaquer
-                #check_sandwich(units)
-                move_enemy_units(units, objectives)
-                unit_moved = True #termine le tour du joueur
-
-  
-
-
 
             if player_score >= 500:
                 victory = True
